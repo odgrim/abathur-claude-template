@@ -432,6 +432,225 @@ Required methods:
 - Map every task back to original requirements (traceability)
 - Verify that every agent_type used either exists already OR has an agent-creation task in prerequisites
 
+## Feature Branch Coordination
+
+**CRITICAL**: All tasks for a single feature MUST use the same `feature_branch` value to enable proper coordination and progress tracking.
+
+### Purpose
+
+The `feature_branch` field coordinates multiple related tasks that together implement a single feature. This enables:
+
+1. **Progress Visibility**: See overall completion status for an entire feature
+2. **Blocker Identification**: Quickly identify failed/blocked tasks preventing feature completion
+3. **Resource Coordination**: Understand which agents are working on which features
+4. **Merge Planning**: Know when all tasks are complete and ready to merge
+
+### Usage Pattern
+
+When breaking down a feature into multiple tasks:
+
+1. **Generate a descriptive feature branch name** based on the feature
+   - Format: `feature/descriptive-name`
+   - Example: `feature/task-queue-enhancements`, `feature/memory-service-refactor`
+
+2. **Pass the SAME feature_branch to ALL related tasks**
+   - Code implementation tasks
+   - Test tasks
+   - Documentation tasks
+   - Integration tasks
+   - Example tasks
+   - Agent creation tasks for the feature
+
+3. **Monitor progress** using feature branch tools
+   - `feature_branch_summary`: Get overall status
+   - `feature_branch_blockers`: Identify issues
+   - `task_list(feature_branch=...)`: List all tasks
+
+### Best Practices
+
+1. **Naming Convention**
+   - Use descriptive, kebab-case branch names
+   - Prefix with `feature/`, `bugfix/`, or `refactor/`
+   - Examples: `feature/authentication-system`, `bugfix/task-timeout-handling`
+
+2. **Granularity**
+   - Feature branch = logical feature unit (not too broad, not too narrow)
+   - Too broad: `feature/backend-improvements` (vague, many unrelated tasks)
+   - Too narrow: `feature/add-one-field` (single task, no coordination needed)
+   - Just right: `feature/task-priority-scheduling` (5-10 related tasks)
+
+3. **Apply to ALL tasks in step 6** when populating the task queue:
+   ```python
+   feature_branch_name = "feature/task-queue-enhancements"
+
+   # All tasks for this feature use the same branch name
+   task_enqueue({
+       "description": task_description,
+       "feature_branch": feature_branch_name,  # ✅ Shared branch
+       # ... other params
+   })
+   ```
+
+4. **Monitoring Workflow**
+   ```python
+   # Before creating dependent tasks, check status
+   summary = feature_branch_summary({"feature_branch": branch_name})
+
+   # If completion rate is low, check for blockers
+   if summary["progress"]["completion_rate"] < 50:
+       blockers = feature_branch_blockers({"feature_branch": branch_name})
+       if blockers["has_blockers"]:
+           # Handle blockers before proceeding
+           pass
+   ```
+
+## Task Branch Workflow
+
+**Purpose**: Individual `task_branch` allows isolated work for specific tasks (e.g., writing a single Python function) that eventually merges into the main `feature_branch`.
+
+### When to Create Task Branches
+
+Create a `task_branch` for tasks that:
+1. **Require isolated git branches** for code changes (e.g., implementing a new function, refactoring a module)
+2. **Will be merged into the feature branch** after completion
+3. **Need separate code review** or testing before integration
+4. **May have experimental or iterative development**
+
+**Example Use Case**: A task to implement a new `calculate_priority()` function that will:
+- Have its own git branch for isolated development
+- Be reviewed and tested independently
+- Eventually merge into `feature/task-queue-enhancements`
+
+### Task Branch Pattern
+
+When creating a task that needs isolated work:
+
+```python
+feature_branch_name = "feature/task-queue-enhancements"
+task_branch_name = f"task/calculate-priority-function"
+
+# 1. Create the implementation task with task_branch
+implementation_task = task_enqueue({
+    "description": """
+# Implement calculate_priority() Function
+
+Write a new `calculate_priority()` function in `src/priority_calculator.py`
+that computes task priority based on deadline, dependencies, and base priority.
+
+## Branch Information
+- Feature Branch: feature/task-queue-enhancements
+- Task Branch: task/calculate-priority-function
+- This task has an isolated branch - work will be committed here first
+
+## Implementation Requirements
+[detailed requirements...]
+
+## Deliverables
+1. Function implementation
+2. Unit tests
+3. Committed to task branch: task/calculate-priority-function
+""",
+    "feature_branch": feature_branch_name,  # Parent feature
+    "task_branch": task_branch_name,        # Individual task branch
+    "agent_type": "python-implementation-specialist",
+    "source": "agent_planner",
+})
+
+# 2. Create follow-up merge task to integrate into feature branch
+merge_task = task_enqueue({
+    "description": """
+# Merge task/calculate-priority-function into feature/task-queue-enhancements
+
+Merge the completed work from task branch into the main feature branch.
+
+## Steps
+1. Verify all tests pass on task branch
+2. Checkout feature branch: feature/task-queue-enhancements
+3. Merge task branch: git merge task/calculate-priority-function
+4. Resolve any conflicts
+5. Run full test suite
+6. Push to feature branch
+
+## Prerequisites
+- Task {implementation_task['task_id']} must be completed
+- All tests must pass
+""",
+    "feature_branch": feature_branch_name,  # Still part of same feature
+    "task_branch": None,  # Merge tasks don't need their own branch
+    "agent_type": "integration-specialist",
+    "source": "agent_planner",
+    "prerequisites": [implementation_task['task_id']],  # Wait for impl to finish
+})
+```
+
+### Task Branch vs Feature Branch
+
+| Aspect | Feature Branch | Task Branch |
+|--------|---------------|-------------|
+| **Scope** | Entire feature (5-15 tasks) | Single task (1 task) |
+| **Lifetime** | Until feature complete | Until merged to feature branch |
+| **Merge Target** | Main branch | Feature branch |
+| **Usage** | All tasks for feature | Specific isolated work |
+| **Example** | `feature/task-queue-enhancements` | `task/calculate-priority-function` |
+
+### Best Practices
+
+1. **Naming Convention for Task Branches**
+   - Format: `task/descriptive-name`
+   - Keep names short and focused
+   - Examples: `task/add-validation`, `task/refactor-parser`
+
+2. **Always Create Merge Tasks**
+   - After creating a task with `task_branch`, create a follow-up merge task
+   - Merge task should depend on the implementation task (use prerequisites)
+   - Merge task integrates work back into `feature_branch`
+
+3. **When NOT to Use Task Branches**
+   - Agent creation tasks (they only modify `.claude/agents/*.md`)
+   - Simple read-only analysis tasks
+   - Documentation-only updates
+   - Tasks that can commit directly to feature branch
+
+4. **Coordination Pattern**
+   ```python
+   # All tasks share the same feature_branch for tracking
+   feature_branch = "feature/memory-service"
+
+   # Some tasks need isolated work (get task_branch)
+   task_branch_for_task_1 = "task/implement-memory-store"
+   task_branch_for_task_2 = "task/add-memory-search"
+
+   # Create tasks with appropriate branches
+   task1 = task_enqueue({
+       "description": "...",
+       "feature_branch": feature_branch,
+       "task_branch": task_branch_for_task_1,  # Isolated work
+       # ...
+   })
+
+   task2 = task_enqueue({
+       "description": "...",
+       "feature_branch": feature_branch,
+       "task_branch": task_branch_for_task_2,  # Isolated work
+       # ...
+   })
+
+   # Create merge tasks
+   merge1 = task_enqueue({
+       "description": "Merge task/implement-memory-store into feature/memory-service",
+       "feature_branch": feature_branch,
+       "task_branch": None,  # No isolated branch for merges
+       "prerequisites": [task1['task_id']],
+   })
+
+   merge2 = task_enqueue({
+       "description": "Merge task/add-memory-search into feature/memory-service",
+       "feature_branch": feature_branch,
+       "task_branch": None,
+       "prerequisites": [task2['task_id']],
+   })
+   ```
+
 **Deliverable Output Format:**
 ```json
 {
@@ -439,7 +658,8 @@ Required methods:
     "status": "SUCCESS|PARTIAL|FAILURE",
     "tasks_created": 0,
     "worktrees_created": 0,
-    "agent_name": "task-planner"
+    "agent_name": "task-planner",
+    "feature_branch": "feature/descriptive-name"
   },
   "deliverables": {
     "agent_creation_tasks": [
@@ -447,7 +667,8 @@ Required methods:
         "task_id": "agent_creation_task_id",
         "agent_name": "hyperspecialized-agent-name",
         "domain": "domain-area",
-        "status": "created"
+        "status": "created",
+        "feature_branch": "feature/descriptive-name"
       }
     ],
     "atomic_tasks": [
@@ -458,7 +679,8 @@ Required methods:
         "dependencies": ["other_task_ids", "agent_creation_task_id"],
         "estimated_minutes": 0,
         "worktree_path": ".abathur/worktrees/task-001",
-        "branch_name": "task/task-001/20251013-143022"
+        "branch_name": "task/task-001/20251013-143022",
+        "feature_branch": "feature/descriptive-name"
       }
     ],
     "worktrees": [
@@ -472,7 +694,8 @@ Required methods:
     "dependency_graph": "mermaid_graph_definition showing agent-creation → implementation flow",
     "agents_existing": ["list of agents that already existed"],
     "agents_created": ["list of agents created by agent-creator tasks"],
-    "missing_agents": []
+    "missing_agents": [],
+    "feature_branch": "feature/descriptive-name"
   },
   "orchestration_context": {
     "next_recommended_action": "Agent-creator will create missing agents, then implementation tasks can execute in isolated worktrees",
@@ -480,7 +703,8 @@ Required methods:
     "critical_path_tasks": [],
     "parallelization_opportunities": [],
     "agent_creation_blocking": "List of implementation tasks blocked on agent creation",
-    "worktree_isolation_enabled": true
+    "worktree_isolation_enabled": true,
+    "feature_branch": "feature/descriptive-name"
   }
 }
 ```
