@@ -26,6 +26,40 @@ Implementation agents depend on this context to execute tasks effectively.
 
 ## Instructions
 
+## Git Commit Safety
+
+**CRITICAL: Repository Permissions and Git Authorship**
+
+When creating git commits, you MUST follow these rules to avoid breaking repository permissions:
+
+- **NEVER override git config user.name or user.email**
+- **ALWAYS use the currently configured git user** (the user who initialized this repository)
+- **NEVER add "Co-Authored-By: Claude <noreply@anthropic.com>" to commit messages**
+- **NEVER add "Generated with [Claude Code]" attribution to commit messages**
+- **RESPECT the repository's configured git credentials at all times**
+
+The repository owner has configured their git identity. Using "Claude" as the author will break repository permissions and cause commits to be rejected.
+
+**Correct approach:**
+```bash
+# The configured user will be used automatically - no action needed
+git commit -m "Your commit message here"
+```
+
+**Incorrect approach (NEVER do this):**
+```bash
+# WRONG - Do not override git config
+git config user.name "Claude"
+git config user.email "noreply@anthropic.com"
+
+# WRONG - Do not add Claude attribution
+git commit -m "Your message
+
+Generated with [Claude Code]
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
 **🚨🚨🚨 CRITICAL: GIT WORKTREE REQUIREMENT 🚨🚨🚨**
 
 **BEFORE YOU CREATE ANY IMPLEMENTATION TASKS, YOU MUST:**
@@ -41,9 +75,24 @@ See Step 5 below for detailed worktree creation instructions. DO NOT SKIP STEP 5
 
 When invoked, you must follow these steps:
 
-1. **Load Technical Specifications and Requirements from Memory**
+1. **Load Technical Specifications, Requirements, and Feature Branch from Memory**
    The task description should provide memory namespace references. Load all context:
    ```python
+   # CRITICAL: Extract feature branch from task metadata
+   # The technical-requirements-specialist passes this in metadata
+   feature_branch_name = task_metadata.get('feature_branch')
+
+   if not feature_branch_name:
+       # Fallback: Try loading from memory
+       feature_branch_info = memory_get({
+           "namespace": "task:{tech_spec_task_id}:workflow",
+           "key": "feature_branch"
+       })
+       feature_branch_name = feature_branch_info.get('feature_branch_name')
+
+   if not feature_branch_name:
+       raise Exception("Feature branch not provided! Cannot create task branches without knowing the feature branch.")
+
    # Load technical specifications
    architecture = memory_get({
        "namespace": "task:{tech_spec_task_id}:technical_specs",
@@ -140,6 +189,10 @@ When invoked, you must follow these steps:
 
    To prevent file conflicts when multiple agents work concurrently, you MUST create isolated git worktrees for implementation tasks that modify code.
 
+   **Feature Branch Context:**
+   The technical-requirements-specialist creates a feature branch (e.g., `feature/task-queue-enhancements`) for all work.
+   ALL task branches you create MUST branch from this feature branch (not main) and will merge back into it.
+
    **When to create worktrees:**
    - For ALL implementation tasks that will modify source code files (not for agent-creation tasks)
    - For tasks assigned to implementation agents (domain-model-specialist, api-specialist, testing-specialist, etc.)
@@ -156,15 +209,29 @@ When invoked, you must follow these steps:
    import os
    from datetime import datetime
 
+   # CRITICAL: Extract feature_branch from task metadata or description
+   # The technical-requirements-specialist passes this in metadata
+   feature_branch_name = task_metadata.get('feature_branch')  # e.g., "feature/task-queue-enhancements"
+
+   if not feature_branch_name:
+       raise Exception("Feature branch name not provided by technical-requirements-specialist!")
+
    # For each implementation task that needs code isolation:
    task_id = generate_unique_task_id()  # e.g., "task-001-domain-model"
-   timestamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
-   branch_name = f"task/{task_id}/{timestamp}"
+
+   # Extract feature name from feature_branch_name (e.g., "feature/user-auth" -> "user-auth")
+   feature_name = feature_branch_name.replace('feature/', '')
+
+   # Generate timestamp without milliseconds for cleaner branch names
+   timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+
+   # New hierarchical format: feature/{feature_name}/task/{task_id}/{timestamp}
+   branch_name = f"{feature_branch_name}/task/{task_id}/{timestamp}"
    worktree_path = f".abathur/worktrees/{task_id}"
 
-   # Create worktree using Bash tool
-   bash_command = f'git worktree add -b {branch_name} {worktree_path}'
-   result = Bash(command=bash_command, description=f"Create worktree for {task_id}")
+   # Create worktree using Bash tool - branching from the FEATURE BRANCH (not main!)
+   bash_command = f'git worktree add -b {branch_name} {worktree_path} {feature_branch_name}'
+   result = Bash(command=bash_command, description=f"Create worktree for {task_id} from {feature_branch_name}")
 
    # ✅ CRITICAL: Validate worktree creation succeeded
    if result.exit_code == 0:
@@ -194,6 +261,8 @@ When invoked, you must follow these steps:
    worktree_info[task_id] = {
        "worktree_path": worktree_path_absolute,
        "branch_name": branch_name,
+       "feature_branch": feature_branch_name,
+       "merge_target": feature_branch_name,  # Task branches merge into feature branch
        "created_at": datetime.now().isoformat()
    }
    ```
@@ -221,9 +290,9 @@ When invoked, you must follow these steps:
    **Error Handling for Worktree Creation:**
 
    1. **Branch already exists**:
-      - Use unique timestamp with microseconds in branch name
-      - Format: `task/{task_id}/{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}`
-      - The microsecond precision prevents collisions
+      - Use unique timestamp in branch name
+      - Format: `{feature_branch_name}/task/{task_id}/{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}`
+      - Example: `feature/user-auth/task/login-validation/2025-10-22-14-30-45`
 
    2. **Worktree path already exists**:
       ```python
@@ -258,7 +327,7 @@ When invoked, you must follow these steps:
    Before marking worktree creation as complete, verify ALL of these:
 
    - [ ] Worktree directory created: `.abathur/worktrees/{task_id}/`
-   - [ ] Git branch created: `task/{task_id}/{timestamp}`
+   - [ ] Git branch created: `{feature_branch_name}/task/{task_id}/{timestamp}`
    - [ ] Worktree path captured in `worktree_info[task_id]` variable
    - [ ] worktree_path will be passed to task_enqueue call (verify in code)
    - [ ] Git exit code checked (should be 0)
@@ -268,15 +337,20 @@ When invoked, you must follow these steps:
    - [ ] Validation results logged for debugging
 
    **Best practices:**
-   - Use descriptive task IDs in branch names (e.g., task/domain-models-queue/20251013-143022-123456)
+   - Use descriptive task IDs in branch names (e.g., feature/user-auth/task/login-validation/2025-10-22-14-30-45)
+   - Task branch names use hierarchical format showing feature relationship
+   - ALWAYS create task branches from the feature branch (not main)
    - Store worktree info for each task to pass to implementation agents
+   - Include feature_branch in worktree_info so agents know the merge target
    - Worktrees will be automatically ignored by .gitignore
    - Implementation agents will work in their assigned worktree directory
    - After task completion, agents should commit their changes in the worktree
+   - Task branches will merge into the feature branch (not main)
+   - Feature branch will eventually merge to main when all tasks complete
    - Cleanup strategy: Worktrees can be merged and removed after task completion or left for manual review
    - ALWAYS validate worktree creation succeeded before proceeding
    - ALWAYS use absolute paths for worktree_path
-   - ALWAYS include microsecond precision in timestamps to prevent collisions
+   - Timestamps use seconds precision (no milliseconds) for cleaner branch names
 
    Example suggested_agents structure:
    ```python
@@ -438,10 +512,13 @@ Parent component: Task Queue System
 ## Worktree Isolation
 **IMPORTANT**: This task has an isolated git worktree to prevent conflicts with concurrent tasks.
 - Working Directory: {worktree_info[task_id]['worktree_path']}
-- Branch: {worktree_info[task_id]['branch_name']}
+- Task Branch: {worktree_info[task_id]['branch_name']}
+- Feature Branch: {worktree_info[task_id]['feature_branch']}
+- Merge Target: This task branch will merge into {worktree_info[task_id]['feature_branch']}
 - **ALL file operations MUST be performed within the worktree directory**
 - Use absolute paths: {worktree_info[task_id]['worktree_path']}/src/abathur/...
-- When complete, commit your changes to the worktree branch
+- When complete, commit your changes to the task branch
+- The task branch will be merged into the feature branch upon completion
 
 ## Technical Specification Reference
 Architecture: task:{tech_spec_task_id}:technical_specs/architecture
@@ -533,6 +610,175 @@ Required methods:
 
    Repeat for ALL atomic tasks with similarly rich context, hyperspecialized agents, AND proper agent-creation dependencies.
 
+9. **Create Final Validation Task (MANDATORY)**
+   **CRITICAL**: After creating all implementation tasks, you MUST create a final validation task that ensures code quality before marking the feature complete.
+
+   **Purpose**: This validation task is the quality gate that prevents tasks from being marked complete when there are still failing type checks or linter errors.
+
+   **Validation Task Requirements**:
+   - Must depend on ALL implementation and testing tasks (use prerequisite_task_ids)
+   - Must run mypy type checking across the entire codebase
+   - Must run all configured linters (ruff, black, etc.)
+   - Must verify all tests pass (pytest with full coverage)
+   - Must be the FINAL task before feature completion
+   - Should use python-testing-specialist or python-code-quality-specialist agent
+
+   **Validation Task Template**:
+   ```python
+   # Collect all implementation task IDs to use as prerequisites
+   all_implementation_task_ids = [
+       task_id for task_id in created_task_ids
+       if task_metadata[task_id].get("task_type") in ["implementation", "testing", "integration"]
+   ]
+
+   validation_task_description = f"""
+# Final Code Quality Validation
+
+## Context
+This is the MANDATORY final validation step for feature: {feature_branch_name}
+NO task can be marked as complete until this validation passes.
+
+## Critical Responsibility
+Ensure all code quality checks pass before considering the feature complete:
+1. Run mypy type checking on entire codebase
+2. Run all linters (ruff, black, isort, etc.)
+3. Run full test suite with pytest
+4. Verify test coverage meets minimum thresholds (>80%)
+5. Report any failures that need fixing
+
+## Validation Checklist
+
+### Type Checking (mypy)
+```bash
+# Run mypy on all source code
+mypy src/abathur --strict
+
+# Verify exit code is 0 (no type errors)
+# If failures exist, list all type errors with file:line references
+```
+
+**Success Criteria**: Zero mypy errors, all type hints valid
+
+### Linter Validation
+```bash
+# Run ruff linter
+ruff check src/ tests/
+
+# Run black formatter check (no changes needed)
+black --check src/ tests/
+
+# Run isort import sorting check
+isort --check-only src/ tests/
+```
+
+**Success Criteria**: Zero linter errors, code follows style guide
+
+### Test Validation
+```bash
+# Run full test suite
+pytest tests/ -v --cov=src/abathur --cov-report=term-missing
+
+# Verify:
+# - All tests pass (exit code 0)
+# - Coverage meets threshold (>80%)
+# - No test failures or errors
+```
+
+**Success Criteria**: All tests pass, coverage >80%
+
+## Failure Handling
+
+If ANY validation check fails:
+1. **DO NOT mark tasks as complete**
+2. Document all failures with specific error messages
+3. Create follow-up tasks to fix each category of failures:
+   - Type errors: Create task for python-code-editor-specialist to fix type hints
+   - Linter errors: Create task for python-code-editor-specialist to fix style issues
+   - Test failures: Create task for python-testing-specialist to fix failing tests
+4. Report validation failures in task output
+5. Block feature completion until all fixes are implemented
+
+## Success Criteria
+- mypy passes with zero errors
+- All linters pass with zero violations
+- All tests pass (100% pass rate)
+- Test coverage meets or exceeds 80%
+- No regressions in existing code
+
+## Deliverable
+Provide detailed validation report with:
+- mypy results (pass/fail, error count, specific errors if any)
+- Linter results (pass/fail, violation count, specific violations if any)
+- Test results (pass/fail, total tests, failures, coverage percentage)
+- Overall validation status (PASS/FAIL)
+- List of follow-up tasks created (if validation failed)
+
+## Prerequisites
+This task depends on completion of ALL implementation tasks:
+{", ".join(all_implementation_task_ids)}
+
+## Estimated Duration
+15-20 minutes
+"""
+
+   # Determine appropriate validation agent
+   # Use python-testing-specialist if it exists, otherwise use suggested quality agent
+   validation_agent_type = "python-testing-specialist"  # Default
+   if "quality_assurance" in suggested_agents:
+       validation_agent_type = suggested_agents["quality_assurance"]["suggested_agent_type"]
+
+   # Create the validation task with ALL implementation tasks as prerequisites
+   validation_task = task_enqueue({
+       "description": validation_task_description,
+       "source": "task-planner",
+       "priority": 9,  # Very high priority - blocks completion
+       "agent_type": validation_agent_type,
+       "estimated_duration_seconds": 1200,  # 20 minutes
+       "prerequisite_task_ids": all_implementation_task_ids,  # ✅ CRITICAL: Depends on ALL tasks
+       "feature_branch": feature_branch_name,
+       "metadata": {
+           "task_type": "validation",
+           "validation_scope": "full",
+           "blocks_completion": True,
+           "quality_gate": True,
+           "tech_spec_namespace": f"task:{tech_spec_task_id}:technical_specs",
+           "validates_tasks": all_implementation_task_ids
+       }
+   })
+
+   # Store validation task ID for tracking
+   validation_task_id = validation_task['task_id']
+
+   # Store in memory for feature tracking
+   memory_add({
+       "namespace": f"task:{tech_spec_task_id}:workflow",
+       "key": "validation_task_id",
+       "value": {
+           "task_id": validation_task_id,
+           "agent_type": validation_agent_type,
+           "blocks_completion": True,
+           "prerequisites": all_implementation_task_ids
+       },
+       "memory_type": "episodic",
+       "created_by": "task-planner"
+   })
+   ```
+
+   **Why This Step Is Critical**:
+   - Prevents incomplete features from being marked as done
+   - Catches type errors and linter violations before they reach main branch
+   - Ensures consistent code quality across all implementation tasks
+   - Provides clear failure reports when quality checks don't pass
+   - Creates a systematic quality gate that cannot be bypassed
+
+   **Validation Task Best Practices**:
+   - ALWAYS create this task last (after all implementation tasks)
+   - ALWAYS make it depend on ALL implementation tasks
+   - NEVER skip this step, even for small features
+   - If validation fails, create specific fix tasks and re-run validation
+   - Document all validation failures with actionable fix recommendations
+   - Use high priority (8-9) to ensure it runs as soon as prerequisites complete
+
 **Best Practices:**
 - Each atomic task must be independently testable
 - Dependencies should be explicit, never implicit
@@ -545,6 +791,8 @@ Required methods:
 - **ALWAYS use prerequisite_task_ids to make implementation tasks depend on agent-creation tasks**
 - **🚨 ALWAYS create git worktrees for implementation tasks that modify code (step 5) 🚨**
 - **🚨 ALWAYS include worktree information in task descriptions and input_data for implementation tasks 🚨**
+- **🚨 ALWAYS create a final validation task (step 9) that runs mypy, linters, and tests 🚨**
+- **🚨 NEVER mark a feature complete until the validation task passes 🚨**
 - **NEVER use generic agent types like "python-backend-developer", "general-purpose", or "implementation-specialist"**
 - **ALWAYS use hyperspecialized agent names from suggested_agents (e.g., "python-domain-model-specialist")**
 - **ALWAYS provide rich context in every task description**:
@@ -563,6 +811,7 @@ Required methods:
 - Include both positive and negative test scenarios
 - Map every task back to original requirements (traceability)
 - Verify that every agent_type used either exists already OR has an agent-creation task in prerequisites
+- The validation task is the quality gate - it must be created for every feature
 
 ## Feature Branch Coordination
 
@@ -659,7 +908,8 @@ When creating a task that needs isolated work:
 
 ```python
 feature_branch_name = "feature/task-queue-enhancements"
-task_branch_name = f"task/calculate-priority-function"
+timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+task_branch_name = f"{feature_branch_name}/task/calculate-priority-function/{timestamp}"
 
 # 1. Create the implementation task with task_branch
 implementation_task = task_enqueue({
@@ -811,7 +1061,7 @@ Merge the completed work from task branch into the main feature branch.
         "dependencies": ["other_task_ids", "agent_creation_task_id"],
         "estimated_minutes": 0,
         "worktree_path": ".abathur/worktrees/task-001",
-        "branch_name": "task/task-001/20251013-143022",
+        "branch_name": "feature/descriptive-name/task/task-001/2025-10-13-14-30-22",
         "feature_branch": "feature/descriptive-name"
       }
     ],
@@ -819,22 +1069,33 @@ Merge the completed work from task branch into the main feature branch.
       {
         "task_id": "task_001",
         "worktree_path": ".abathur/worktrees/task-001",
-        "branch_name": "task/task-001/20251013-143022",
+        "branch_name": "feature/descriptive-name/task/task-001/2025-10-13-14-30-22",
+        "feature_branch": "feature/descriptive-name",
+        "merge_target": "feature/descriptive-name",
         "created_at": "2025-10-13T14:30:22"
       }
     ],
-    "dependency_graph": "mermaid_graph_definition showing agent-creation → implementation flow",
+    "validation_task": {
+      "task_id": "validation_task_id",
+      "agent_type": "python-testing-specialist",
+      "description": "Final code quality validation (mypy, linters, tests)",
+      "depends_on_all_tasks": true,
+      "blocks_completion": true,
+      "feature_branch": "feature/descriptive-name"
+    },
+    "dependency_graph": "mermaid_graph_definition showing agent-creation → implementation → validation flow",
     "agents_existing": ["list of agents that already existed"],
     "agents_created": ["list of agents created by agent-creator tasks"],
     "missing_agents": [],
     "feature_branch": "feature/descriptive-name"
   },
   "orchestration_context": {
-    "next_recommended_action": "Agent-creator will create missing agents, then implementation tasks can execute in isolated worktrees",
+    "next_recommended_action": "Agent-creator will create missing agents, then implementation tasks can execute in isolated worktrees, finally validation task will verify code quality",
     "agent_orchestration_mode": "task-planner-orchestrates-agents",
     "critical_path_tasks": [],
     "parallelization_opportunities": [],
     "agent_creation_blocking": "List of implementation tasks blocked on agent creation",
+    "validation_task_blocks_completion": true,
     "worktree_isolation_enabled": true,
     "feature_branch": "feature/descriptive-name"
   }
