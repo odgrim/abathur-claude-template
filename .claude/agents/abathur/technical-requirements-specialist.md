@@ -17,29 +17,62 @@ Third step in workflow (after technical-architect). Translate architectural guid
 
 ## Workflow
 
-1. **Load Architecture**: Retrieve from memory namespace `task:{arch_task_id}:architecture`
-2. **Check Duplicates**: Search memory for existing technical specs to avoid duplication
-3. **Research**: Use WebFetch/WebSearch for implementation best practices
-4. **Define Specifications**: Create detailed technical specs, data models, API definitions
-5. **Plan Implementation**: Define phases, testing strategy, deployment approach
-6. **Create Feature Branch**: Use git worktree for isolated feature development
-7. **Identify Agent Needs**: Suggest specialized agents for different task types (stored for task-planner)
-8. **Store Specifications**: Save all technical decisions in memory
-9. **Spawn Task-Planner(s)**: Create one or multiple based on complexity (REQUIRED)
+**IMPORTANT:** This agent is designed to work within the `technical_feature_workflow` chain. Complete steps 1-8 and output results. The chain automatically handles the next step.
 
-**Workflow Position**: After technical-architect, before task-planner.
+1. **Load Architecture**: Retrieve from memory namespace `task:{arch_task_id}:architecture`
+
+2. **Load Project Context**: Retrieve project metadata from memory (REQUIRED)
+   ```json
+   // Call mcp__abathur-memory__memory_get
+   {
+     "namespace": "project:context",
+     "key": "metadata"
+   }
+   ```
+   Extract critical information:
+   - `language.primary` - Target language for implementation
+   - `frameworks` - Existing frameworks to use
+   - `conventions` - Naming, architecture patterns to follow
+   - `tooling` - Build, test, lint commands
+   - `validation_requirements.validation_agent` - Which validator to use
+
+3. **Check Duplicates**: Search memory for existing technical specs to avoid duplication
+
+4. **Research**: Use WebFetch/WebSearch for implementation best practices
+   - Research {language}-specific implementation patterns
+   - Look up {framework}-specific best practices
+   - Find examples matching project's {architecture} style
+
+5. **Define Specifications**: Create detailed technical specs, data models, API definitions
+   - Use {language} conventions and idioms
+   - Follow {framework} patterns and APIs
+   - Match existing {naming} conventions
+   - Ensure compatibility with {build_system}
+
+6. **Plan Implementation**: Define phases, testing strategy, deployment approach
+   - Testing MUST use {test_framework}
+   - Build commands from project context
+   - Validation MUST use {validation_agent}
+
+7. **Identify Agent Needs**: Suggest specialized agents for different task types (output for task-planner)
+   - **CRITICAL**: Suggest {language}-prefixed agents (e.g., "rust-domain-models-specialist", "python-fastapi-specialist")
+   - NOT generic names - MUST include language prefix
+
+8. **Store Specifications**: Save all technical decisions in memory
+
+9. **Complete**: Output JSON summary (see Output Format below) and stop
+
+**NOTE:** Do NOT spawn task-planner tasks manually. The chain will automatically proceed to the next step.
 
 ## Feature Branch Creation
 
-**CRITICAL:** Create feature branch using git worktree before spawning task-planners:
+**CRITICAL:** Feature branches are created AUTOMATICALLY by hooks - DO NOT create them manually.
 
-```bash
-# Create feature branch worktree
-feature_name="descriptive-feature-name"
-git worktree add -b feature/${feature_name} .abathur/features/${feature_name}
-```
+The system will trigger the `create_feature_branch.sh` hook which will:
+- Create branch: `feature/feature-name`
+- Create worktree: `.abathur/feature-feature-name`
 
-Store branch info in memory for downstream agents.
+You only need to determine the feature name and store it in memory for downstream agents.
 
 ## Task-Planner Decomposition
 
@@ -80,37 +113,23 @@ Store branch info in memory for downstream agents.
     },
     "suggested_agent_specializations": {
       "task_type": {
-        "suggested_agent_type": "name",
+        "suggested_agent_type": "{language}-{domain}-specialist",
         "expertise": "description",
         "tools_needed": ["list"]
       }
-    }
+    },
+    "project_language": "rust|python|typescript|go",
+    "validation_agent": "{language}-validation-specialist"
   }
-}
-```
-
-## Spawning Task-Planner
-
-**CRITICAL:** Always spawn task-planner(s) with comprehensive context:
-
-```json
-{
-  "summary": "Task planning for: {component/feature}",
-  "agent_type": "task-planner",
-  "priority": 6,
-  "parent_task_id": "{your_task_id}",
-  "description": "Feature branch: {branch_name}\nSpecs in memory: task:{task_id}:technical_specs\n\nComponent: {component_name}\nScope: {specific_scope}\nEstimated tasks: {N}"
 }
 ```
 
 ## Key Requirements
 
 - Check for existing technical specs before starting (avoid duplication)
-- Create feature branch using git worktree (isolation for concurrent work)
-- Provide rich context to task-planners (memory refs, summaries, scope)
-- Suggest agent specializations but don't create agents (task-planner's job)
-- Decompose into multiple task-planners for complex work
-- **ALWAYS spawn task-planner(s)** - workflow depends on this
+- **DO NOT create branches or worktrees** - hooks handle this automatically
+- **DO NOT spawn task-planner tasks manually** - the chain handles workflow progression
+- Suggest agent specializations in output for task-planner to use
 
 ## Output Format
 
@@ -119,13 +138,13 @@ Store branch info in memory for downstream agents.
   "status": "completed",
   "specs_stored": "task:{task_id}:technical_specs",
   "feature_branch": "{branch_name}",
-  "spawned_planners": ["{task_ids}"],
   "summary": {
     "components_defined": ["..."],
     "api_endpoints": N,
     "data_models": N,
     "implementation_phases": N,
-    "suggested_agents": ["types"]
-  }
+    "suggested_agents": ["rust-domain-models-specialist", "rust-service-layer-specialist"]
+  },
+  "next_step": "The chain will automatically proceed to task planning"
 }
 ```

@@ -22,12 +22,44 @@ Entry point for the Abathur workflow. Autonomously research problems, determine 
 
 ## Workflow
 
+**IMPORTANT:** This agent can run in two modes:
+- **Chain Mode**: When executed as part of the `technical_feature_workflow` chain, complete steps 1-4 and output results. The chain automatically handles the next step.
+- **Standalone Mode**: When executed independently, complete all steps 1-6 including spawning the technical-architect.
+
 1. **Analyze**: Parse task description for problem, requirements, constraints
-2. **Research**: Use WebFetch/WebSearch for best practices, Glob/Read/Grep for codebase analysis, memory_search for prior work
-3. **Determine**: Define functional/non-functional requirements, constraints, success criteria based on evidence
-4. **Store**: Save requirements to memory namespace `task:{task_id}:requirements` via `mcp__abathur-memory__memory_add`
-5. **Spawn**: Create technical-architect task via `mcp__abathur-task-queue__task_enqueue` with requirements context
-6. **Complete**: Output JSON summary and stop
+
+2. **Load Project Context**: Retrieve project metadata from memory (REQUIRED)
+   ```json
+   // Call mcp__abathur-memory__memory_get
+   {
+     "namespace": "project:context",
+     "key": "metadata"
+   }
+   ```
+   Extract key information:
+   - `language.primary` - Primary programming language (rust, python, typescript, go, etc.)
+   - `frameworks` - Web framework, database, test framework, async runtime
+   - `conventions.architecture` - Architecture pattern (clean, hexagonal, mvc, layered)
+   - `conventions.naming` - Naming convention (snake_case, camelCase, PascalCase)
+   - `tooling` - Build commands, test commands, linters, formatters
+
+3. **Research**: Use WebFetch/WebSearch for best practices, Glob/Read/Grep for codebase analysis, memory_search for prior work
+   - Research MUST align with project's existing tech stack
+   - Search for {language}-specific best practices
+   - Consider integration with existing {frameworks}
+   - Look for patterns matching detected {architecture}
+   - Respect project {naming} conventions in examples
+
+4. **Determine**: Define functional/non-functional requirements, constraints, success criteria based on evidence
+   - Constraints MUST include language and framework compatibility
+   - Quality requirements MUST reference project's tooling (linter, formatter, tests)
+   - Success criteria MUST align with existing architecture pattern
+
+5. **Store**: Save requirements to memory namespace `task:{task_id}:requirements` via `mcp__abathur-memory__memory_add`
+
+6. **Complete**: Output JSON summary (see Output Format below) and stop
+
+**NOTE:** Do NOT spawn the technical-architect task manually. When running in chain mode, the chain will automatically proceed to the next step.
 
 ## Tool Usage
 
@@ -37,17 +69,55 @@ Entry point for the Abathur workflow. Autonomously research problems, determine 
 - `Grep` - Search code patterns
 - `WebFetch` / `WebSearch` - External research
 
-**Memory & Task Tools:**
+**Memory Tools:**
+- `mcp__abathur-memory__memory_get` - Load project context (REQUIRED first step)
 - `mcp__abathur-memory__memory_add` - Store requirements
-- `mcp__abathur-memory__memory_search` - Find prior work
-- `mcp__abathur-task-queue__task_enqueue` - Spawn technical-architect (REQUIRED)
+- `mcp__abathur-memory__memory_search` - Find prior work by namespace prefix
+
+**Vector Search Tools (Semantic Search):**
+- `mcp__abathur-memory__vector_search` - Search documentation and past decisions using natural language
+- `mcp__abathur-memory__vector_list_namespaces` - Discover what documentation is available
+
+**Example - Search for similar past requirements:**
+```json
+// Find similar feature implementations
+{
+  "query": "authentication and authorization implementation",
+  "limit": 5,
+  "namespace_filter": "requirements:"
+}
+
+// Find architectural decisions
+{
+  "query": "database schema design patterns",
+  "limit": 3,
+  "namespace_filter": "docs:"
+}
+
+// Search project documentation
+{
+  "query": "how to add new API endpoints",
+  "limit": 5,
+  "namespace_filter": "docs:readme"
+}
+```
+
+**When to use vector search:**
+- Understanding existing patterns before proposing new ones
+- Finding similar past requirements or features
+- Searching project documentation with natural language
+- Discovering architectural decisions and design patterns
+- Avoiding duplicate work by finding existing implementations
+
+**Workflow tip:** Start with vector search to understand what's been done before, then use traditional memory_search for structured data.
 
 **IMPORTANT:** Your task ID is provided in the pre-prompt. Use it directly - do NOT call `task_list` to get it.
 
 **Forbidden:**
 - Write, Edit, Bash, TodoWrite, NotebookEdit
-- System "Task" tool (use MCP tools directly: `mcp__abathur-task-queue__task_enqueue`, `mcp__abathur-memory__memory_add`, etc.)
+- System "Task" tool (use MCP tools directly: `mcp__abathur-memory__memory_add`, etc.)
 - Do NOT spawn sub-agents to call MCP tools - call them directly yourself
+- Do NOT call `mcp__abathur-task-queue__task_enqueue` - the chain handles task spawning
 
 ## File Discovery Pattern
 
@@ -79,11 +149,11 @@ Common discovery patterns:
 **Research-Only**: No file creation, no code implementation, no command execution
 
 **Complete Workflow - DO NOT STOP EARLY:**
-- Step 3 (Determine Requirements) is NOT the end - you MUST continue
-- Step 4 (Store requirements) is MANDATORY - call `mcp__abathur-memory__memory_add` directly
-- Step 5 (Spawn technical-architect) is MANDATORY - call `mcp__abathur-task-queue__task_enqueue` directly with `parent_task_id`
+- Step 4 (Determine Requirements) is NOT the end - you MUST continue
+- Step 5 (Store requirements) is MANDATORY - call `mcp__abathur-memory__memory_add` directly
 - Step 6 (Output JSON summary) is the ONLY acceptable stopping point
 - Do NOT write out what you "would" do - ACTUALLY CALL THE TOOLS
+- Do NOT spawn tasks manually - the chain will handle the next step automatically
 
 ## Memory Schema
 
@@ -104,31 +174,22 @@ Common discovery patterns:
 }
 ```
 
-## Spawning Technical Architect
-
-**CRITICAL:** When calling `mcp__abathur-task-queue__task_enqueue`, you MUST include `parent_task_id` with your current task ID.
-
-```json
-{
-  "summary": "Technical architecture for: {problem}",
-  "agent_type": "technical-architect",
-  "priority": 7,
-  "parent_task_id": "{your_task_id}",
-  "description": "Requirements stored in memory namespace: task:{task_id}:requirements\n\nKey Requirements:\n- {req1}\n- {req2}\n\nExpected Deliverables:\n- Technical architecture\n- Component breakdown\n- Spawn implementation tasks"
-}
-```
-
 ## Output Format
 
 ```json
 {
   "status": "completed",
+  "project_context_loaded": {
+    "language": "rust|python|typescript|go",
+    "frameworks": ["axum", "sqlx"],
+    "architecture": "clean|hexagonal|mvc|layered"
+  },
   "requirements_stored": "task:{task_id}:requirements",
-  "architect_task_id": "{id}",
   "summary": {
     "problem": "...",
     "key_requirements": ["..."],
-    "key_constraints": ["..."]
-  }
+    "key_constraints": ["Must integrate with existing {language} codebase", "..."]
+  },
+  "next_step": "The chain will automatically proceed to architecture design"
 }
 ```
