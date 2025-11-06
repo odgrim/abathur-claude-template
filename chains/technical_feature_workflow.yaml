@@ -578,7 +578,5 @@ validation_rules:
     error_message: "Task plan must include tasks array with agent assignments and execution order"
 
   - step_id: prepare_merge
-    rule_type:
-      type: custom_validator
-      name: merge_readiness
+    rule_type: custom_validator
     error_message: "Cannot merge - not all verification checks passed"
