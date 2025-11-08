@@ -86,7 +86,7 @@ steps:
       #     - "{task_id}"
       #     - "requirements"
     next: design_architecture
-    timeout_secs: 300
+    timeout_secs: 600
 
   - id: design_architecture
     role: technical-architect
@@ -179,7 +179,7 @@ steps:
       #   level: info
       #   message: "Architecture designed and feature branch created for task {task_id}"
     next: create_technical_specs
-    timeout_secs: 420
+    timeout_secs: 600
 
   - id: create_technical_specs
     role: technical-requirements-specialist
@@ -293,7 +293,7 @@ steps:
       #   level: info
       #   message: "Technical specifications created for {components.length} components"
     next: create_task_plan
-    timeout_secs: 480
+    timeout_secs: 600
 
   - id: create_task_plan
     role: task-planner
@@ -400,7 +400,7 @@ steps:
       #   level: info
       #   message: "Created {tasks.length} implementation tasks for execution"
     next: monitor_implementation
-    timeout_secs: 360
+    timeout_secs: 420
 
   - id: monitor_implementation
     role: task-planner
@@ -470,7 +470,7 @@ steps:
       #     - "{task_id}"
       #     - "{progress_percentage}"
     next: prepare_merge
-    timeout_secs: 180
+    timeout_secs: 300
 
   - id: prepare_merge
     role: git-worktree-merge-orchestrator
