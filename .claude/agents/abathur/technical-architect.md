@@ -114,9 +114,12 @@ When the architecture decomposes into distinct features/components, spawn multip
 
 11. **Assess Risks**: Identify technical risks with mitigation strategies
 
-12. **Spawn or Complete**:
-    - **Mode 1 (single feature)**: Output JSON summary, let chain proceed
-    - **Mode 2 (multiple features)**: Spawn technical-requirements-specialist tasks (see Spawning Section), then output JSON
+12. **Output Result**:
+    - **Mode 1 (single feature)**: Complete architecture analysis, output as specified by chain prompt, chain will proceed automatically
+    - **Mode 2 (multiple features)**:
+      1. Spawn technical-requirements-specialist tasks (see Spawning Section)
+      2. Collect spawned task IDs
+      3. Complete architecture analysis and include spawned task IDs in output
 
 ## Decomposition Criteria
 
@@ -194,62 +197,13 @@ Each spawned task becomes an independent workflow that goes through: tech-spec â
 - **Mode 1 (single feature)**: Let chain proceed automatically
 - **Mode 2 (multiple features)**: Spawn tasks manually with `chain_id` set
 
-## Output Format
+## Architecture Components Reference
 
-### Mode 1 (Single Feature - Chain Continues)
-```json
-{
-  "status": "completed",
-  "mode": "single_feature",
-  "project_context_loaded": {
-    "language": "rust|python|typescript|go",
-    "existing_frameworks": ["axum", "sqlx"],
-    "architecture": "clean|hexagonal|mvc|layered"
-  },
-  "architecture_stored": "task:{task_id}:architecture",
-  "summary": {
-    "architectural_style": "...",
-    "technology_stack": ["existing_framework_1", "new_framework_2 (justified)"],
-    "integration_approach": "Extends existing {architecture} pattern",
-    "decomposed": false,
-    "feature_count": 1,
-    "key_risks": ["..."]
-  },
-  "next_step": "Chain will automatically proceed to technical requirements specification"
-}
-```
+When documenting architecture decisions, ensure comprehensive coverage:
 
-### Mode 2 (Multiple Features - Tasks Spawned)
-```json
-{
-  "status": "completed",
-  "mode": "multiple_features",
-  "project_context_loaded": {
-    "language": "rust|python|typescript|go",
-    "existing_frameworks": ["axum", "sqlx"],
-    "architecture": "clean|hexagonal|mvc|layered"
-  },
-  "architecture_stored": "task:{task_id}:architecture",
-  "spawned_tasks": [
-    {
-      "task_id": "{uuid}",
-      "feature": "User Authentication API",
-      "scope": "login, logout, sessions"
-    },
-    {
-      "task_id": "{uuid}",
-      "feature": "Password Management",
-      "scope": "reset, change, validation"
-    }
-  ],
-  "summary": {
-    "architectural_style": "...",
-    "technology_stack": ["existing_framework_1", "new_framework_2 (justified)"],
-    "integration_approach": "Extends existing {architecture} pattern",
-    "decomposed": true,
-    "feature_count": 2,
-    "key_risks": ["..."]
-  },
-  "next_step": "Spawned tasks will each proceed through their own technical_feature_workflow chain"
-}
-```
+**Components**: Name, responsibility, interfaces, dependencies
+**Technology Stack**: Layer, technology choice, justification (prefer existing frameworks)
+**Data Models**: Entity name, fields, relationships
+**API Contracts**: Endpoints, methods, request/response schemas
+**Decomposition**: Strategy (single/multiple), subprojects list, rationale
+**Architectural Decisions**: Decision, rationale, alternatives considered

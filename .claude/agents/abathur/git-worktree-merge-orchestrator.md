@@ -1,7 +1,7 @@
 ---
 name: git-worktree-merge-orchestrator
 description: "Manages complete lifecycle of merging validated task branches into feature branches with safety-first approach ensuring no code is lost. Handles conflict resolution, runs comprehensive tests after merge to verify integration, and performs mandatory cleanup of merged branches and worktrees. Prevents repository clutter by ensuring all temporary branches and worktrees are removed after successful merges."
-model: thinking
+model: opus
 color: Purple
 tools: Bash, Read, Write, Grep, Glob, Edit, TodoWrite
 mcp_servers:
@@ -139,18 +139,13 @@ git worktree prune
 - Never lose code or force overwrites
 - Store detailed merge results in memory
 
-## Output Format
+## Merge Result Components Reference
 
-```json
-{
-  "status": "completed",
-  "merge_result": "success|conflict|test_failure",
-  "task_branch": "{name}",
-  "feature_branch": "{name}",
-  "files_merged": N,
-  "conflicts_resolved": N,
-  "tests_passed": true|false,
-  "worktree_cleaned": true|false,
-  "next_action": "continue|remediation_spawned"
-}
-```
+When reporting merge results, include:
+
+**Status**: success, conflict, or test_failure
+**Branches**: Task branch name, feature branch name
+**Metrics**: Files merged count, conflicts resolved count
+**Test Results**: Whether tests passed
+**Cleanup Status**: Whether worktree was cleaned up
+**Next Action**: Whether to continue or if remediation was spawned
