@@ -65,7 +65,7 @@ steps:
     post_hooks:
       # Store requirements in memory for future reference
       - type: run_script
-        script_path: scripts/store_requirements.sh
+        script_path: .abathur/scripts/store_requirements.sh
         args:
           - "{task_id}"
           - "requirements"
@@ -139,13 +139,13 @@ steps:
     post_hooks:
       # Store architecture in memory
       - type: run_script
-        script_path: scripts/store_architecture.sh
+        script_path: .abathur/scripts/store_architecture.sh
         args:
           - "{task_id}"
           - "architecture"
       # Create feature branch for this work
       - type: run_script
-        script_path: scripts/create_feature_branch.sh
+        script_path: .abathur/scripts/create_feature_branch.sh
         args:
           - "{task_id}"
           - "{feature_name}"
@@ -239,14 +239,14 @@ steps:
     pre_hooks:
       # Checkout and prepare feature branch worktree
       - type: run_script
-        script_path: scripts/prepare_feature_worktree.sh
+        script_path: .abathur/scripts/prepare_feature_worktree.sh
         args:
           - "{task_id}"
           - "{feature_name}"
     post_hooks:
       # Store technical specs in memory
       - type: run_script
-        script_path: scripts/store_technical_specs.sh
+        script_path: .abathur/scripts/store_technical_specs.sh
         args:
           - "{task_id}"
           - "technical_specs"
@@ -339,13 +339,13 @@ steps:
     post_hooks:
       # Create task branches and worktrees for tasks that need them
       - type: run_script
-        script_path: scripts/create_task_worktrees.sh
+        script_path: .abathur/scripts/create_task_worktrees.sh
         args:
           - "{task_id}"
           - "tasks_json"
       # Spawn implementation tasks via task queue
       - type: run_script
-        script_path: scripts/spawn_implementation_tasks.sh
+        script_path: .abathur/scripts/spawn_implementation_tasks.sh
         args:
           - "{task_id}"
           - "tasks_json"
@@ -409,7 +409,7 @@ steps:
     post_hooks:
       # Update task status in memory
       - type: run_script
-        script_path: scripts/update_progress.sh
+        script_path: .abathur/scripts/update_progress.sh
         args:
           - "{task_id}"
           - "{progress_percentage}"
@@ -477,13 +477,13 @@ steps:
     post_hooks:
       # Merge all task branches to feature branch
       - type: run_script
-        script_path: scripts/merge_task_branches.sh
+        script_path: .abathur/scripts/merge_task_branches.sh
         args:
           - "{task_id}"
           - "branches_json"
       # Clean up all worktrees and branches
       - type: run_script
-        script_path: scripts/cleanup_all_worktrees.sh
+        script_path: .abathur/scripts/cleanup_all_worktrees.sh
         args:
           - "{task_id}"
       - type: log_message
