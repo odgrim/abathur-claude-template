@@ -201,7 +201,7 @@ hooks:
     enabled: false
 
   - id: spawn-planner-after-tech-spec
-    description: "Create task branch and spawn task-planner after technical specifications complete"
+    description: "[DISABLED] Create task branch and spawn task-planner - Chain workflow handles this automatically"
     event:
       type: post_complete
     conditions:
@@ -215,7 +215,7 @@ hooks:
         level: info
         message: "Technical specs complete - creating task branch and spawning task-planner"
     priority: 10
-    enabled: true
+    enabled: false
 
   # ============================================================================
   # GIT INFRASTRUCTURE HOOKS
@@ -238,7 +238,7 @@ hooks:
     enabled: false
 
   - id: setup-task-planner-branch
-    description: "Generate branch and worktree metadata for task-planner"
+    description: "[DISABLED] Generate branch and worktree metadata for task-planner - Chain orchestrator handles this via inheritance"
     event:
       type: pre_start
     conditions:
@@ -253,7 +253,7 @@ hooks:
         level: info
         message: "Setting up task branch for task-planner ${task_id}"
     priority: 11
-    enabled: true
+    enabled: false
 
   - id: create-worktree-before-implementation
     description: "Create task branch worktree before implementation tasks start"
