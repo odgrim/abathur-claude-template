@@ -158,7 +158,6 @@ steps:
 
   - id: create_technical_specs
     role: technical-requirements-specialist
-    working_directory: ".abathur/worktrees/feature-{feature_name}"
     prompt: |
       Requirements: {gather_requirements.output}
       Architecture: {previous_output}
@@ -252,12 +251,16 @@ steps:
   - id: create_task_plan
     role: task-planner
     needs_task_branch: true
-    working_directory: ".abathur/worktrees/feature-{feature_name}"
+    working_directory: "{worktree_path}"
     prompt: |
       Technical Specs: {previous_output}
 
-      IMPORTANT: The feature branch is named "feature/{feature_name}".
-      Task branches will be named "task/{feature_name}/{task-id}" where task-id is a kebab-case slug derived from the task summary.
+      IMPORTANT: Branch Strategy
+      - Feature branch: "feature/{feature_name}"
+      - You are working in task branch: "task/{feature_name}/planning"
+      - ALL implementation tasks will inherit YOUR task branch and worktree
+      - All implementation work happens in the SAME branch you're in
+      - When all tasks complete, this single task branch merges into the feature branch
 
       Output the task plan in JSON format:
       {
@@ -345,7 +348,8 @@ steps:
 
   - id: monitor_implementation
     role: task-planner
-    needs_task_branch: true
+    needs_task_branch: false
+    working_directory: "{worktree_path}"
     prompt: |
       Task Plan: {previous_output}
 
