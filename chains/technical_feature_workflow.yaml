@@ -74,6 +74,9 @@ steps:
 
   - id: design_architecture
     role: technical-architect
+    needs_branch: true
+    branch_parent: "main"
+    branch_name_template: "feature/{feature_name}"
     prompt: |
       Requirements from previous step:
       {previous_output}
@@ -143,16 +146,9 @@ steps:
         args:
           - "${task_id}"
           - "architecture"
-      # Create feature branch for this work
-      - type: run_script
-        script_path: .abathur/scripts/create_feature_branch.sh
-        args:
-          - "${task_id}"
-          - "${feature_name}"
-          - "${decomposition.strategy}"
       - type: log_message
         level: info
-        message: "Architecture designed and feature branch created for task ${task_id}"
+        message: "Architecture designed for task ${task_id}"
     next: create_technical_specs
     timeout_secs: 600
 
@@ -250,7 +246,9 @@ steps:
 
   - id: create_task_plan
     role: task-planner
-    needs_task_branch: true
+    needs_branch: true
+    branch_parent: "feature_branch"
+    branch_name_template: "task/{feature_name}/{step_id}"
     working_directory: "{worktree_path}"
     prompt: |
       Technical Specs: {previous_output}
@@ -348,7 +346,7 @@ steps:
 
   - id: monitor_implementation
     role: task-planner
-    needs_task_branch: false
+    needs_branch: false
     working_directory: "{worktree_path}"
     prompt: |
       Task Plan: {previous_output}
