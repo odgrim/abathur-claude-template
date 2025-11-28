@@ -332,15 +332,12 @@ steps:
           execution_order:
             type: array
     post_hooks:
-      # Spawn implementation tasks via task queue
-      - type: run_script
-        script_path: .abathur/scripts/spawn_implementation_tasks.sh
-        args:
-          - "${task_id}"
-          - "tasks_json"
+      # NOTE: Task spawning is handled automatically by PromptChainService.spawn_tasks_from_output()
+      # when step.id == "create_task_plan" or step.role == "task-planner".
+      # The spawn_implementation_tasks.sh hook was REMOVED to prevent duplicate task creation.
       - type: log_message
         level: info
-        message: "Created implementation tasks for execution"
+        message: "Task plan created - tasks will be spawned automatically by chain service"
     next: prepare_merge
     timeout_secs: 420
 
